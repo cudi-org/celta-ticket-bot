@@ -2,8 +2,8 @@ name: Celta Ticket Check
 
 on:
   schedule:
-    - cron: '0 * * * *' # Ejecuta cada hora
-  workflow_dispatch: # Permite ejecutarlo a mano para probar
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,7 +14,7 @@ jobs:
       - name: Configurar Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10'
       - name: Instalar librerías
         run: pip install -r requirements.txt
       - name: Ejecutar script
