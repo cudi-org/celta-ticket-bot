@@ -1,8 +1,9 @@
 import cloudscraper
-from bs4 import BeautifulSoup
 import requests
 import os
+import re
 
+# URL alternativa (API de sesión)
 URL_PARTIDO = "https://tickets.oneboxtds.com/rccelta/products/2730371/prices?viewCode=V_blockmap"
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -15,53 +16,51 @@ def enviar_telegram(mensaje):
     requests.post(url, data=payload)
 
 def check_tickets():
-    scraper = cloudscraper.create_scraper()
+    # Intentamos con una sesión simulada completa
+    session = requests.Session()
+    scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False}, sess=session)
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'es-ES,es;q=0.9',
-        'Referer': 'https://rccelta.es/'
+        'Origin': 'https://tickets.oneboxtds.com',
+        'Referer': 'https://tickets.oneboxtds.com/rccelta/select/2730371?viewCode=V_blockmap'
     }
     
     try:
-        response = scraper.get(URL_PARTIDO, headers=headers)
+        # Hacemos una petición previa a la home para pillar cookies
+        scraper.get("https://tickets.oneboxtds.com/rccelta/select/2730371", headers=headers, timeout=15)
+        
+        # Ahora vamos a por los precios
+        response = scraper.get(URL_PARTIDO, headers=headers, timeout=15)
         
         if response.status_code == 200:
-            print("¡Conexión exitosa!")
-            # Al ser una API, buscamos precios en el texto crudo
-            texto = response.text
-            precios_encontrados = []
+            print("¡CONEXIÓN EXITOSA!")
+            precios = re.findall(r'"amount":\s*(\d+)', response.text)
             
-            # Buscamos números que parezcan precios en el JSON/HTML
-            import re
-            # Busca números seguidos o precedidos de € o dentro de campos de precio
-            posibles_precios = re.findall(r'\d+(?:\.\d+)?', texto)
-            
-            for p in posibles_precios:
-                valor = int(float(p))
-                # Filtramos para que sean precios realistas de entradas
-                if 15 <= valor <= 300: 
-                    precios_encontrados.append(valor)
+            if not precios: # Si no es JSON puro, buscamos números sueltos
+                precios = re.findall(r'(\d+)€', response.text) or re.findall(r'(\d+)\s*€', response.text)
+
+            precios_encontrados = [int(p) for p in precios if 15 <= int(p) <= 400]
             
             if precios_encontrados:
                 min_precio = min(precios_encontrados)
                 print(f"Precio detectado: {min_precio}€")
                 
                 if min_precio <= PRECIO_CHOLLO:
-                    msg = f"🚨🚨 ¡CHOLLO DETECTADO! 🚨🚨\n\nEntradas por solo *{min_precio}€*.\nLink: https://rccelta.es/entradas/"
-                    enviar_telegram(msg)
+                    enviar_telegram(f"🚨🚨 ¡CHOLLO! Entradas a *{min_precio}€*")
                 elif min_precio <= PRECIO_ALERTA:
-                    msg = f"⚽ Entradas Celta disponibles: *{min_precio}€*\nLink: https://rccelta.es/entradas/"
-                    enviar_telegram(msg)
+                    enviar_telegram(f"⚽ Entradas Celta: *{min_precio}€*")
             else:
-                print("No se encontraron precios en el contenido.")
-                
+                print("No hay precios disponibles en este momento.")
         else:
-            print(f"Error: {response.status_code}. La web sigue bloqueando el acceso.")
+            print(f"Error {response.status_code}. OneBox nos sigue bloqueando.")
+            # Si falla, mandamos un aviso una sola vez para saberlo
+            # enviar_telegram("⚠️ El bot está siendo bloqueado por la web del Celta.")
             
     except Exception as e:
-        print(f"Ocurrió un error inesperado: {e}")
+        print(f"Fallo crítico: {e}")
 
 if __name__ == "__main__":
     check_tickets()
