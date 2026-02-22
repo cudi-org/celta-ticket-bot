@@ -1,0 +1,1 @@
+# celta-ticket-bot
