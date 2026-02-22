@@ -6,7 +6,7 @@ import os
 URL_PARTIDO = "https://tickets.oneboxtds.com/rccelta/select/2730371?viewCode=V_blockmap"
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-PRECIO_ALERTA = 60
+PRECIO_ALERTA = 200
 PRECIO_CHOLLO = 45
 
 def enviar_telegram(mensaje):
