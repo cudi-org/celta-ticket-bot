@@ -11,43 +11,55 @@ def enviar_telegram(mensaje):
     requests.post(url, data=payload)
 
 def check_tickets():
+    session = requests.Session()
+    
     headers = {
         "Host": "tickets.oneboxtds.com",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json",
-        "Origin": "https://tickets.oneboxtds.com"
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "es-ES,es;q=0.9",
+        "Origin": "https://tickets.oneboxtds.com",
+        "Referer": "https://tickets.oneboxtds.com",
+        "Connection": "keep-alive"
     }
     
     try:
-        response = requests.get(URL_API, headers=headers, timeout=20)
+        session.get("http://178.255.227.10", headers=headers, timeout=20)
+        
+        response = session.get(URL_API, headers=headers, timeout=20)
+        
         if response.status_code == 200:
-            data = response.json()
-            sectores_libres = []
-            
-            for zona in data:
-                # Comprobar disponibilidad
-                libres = zona.get("availability", {}).get("available", 0)
-                if libres > 0:
-                    nombre = zona.get("name", "Zona")
-                    # Extraer precio total de la tarifa por defecto
-                    precio = "N/A"
-                    rates = zona.get("rates", [])
-                    if rates:
-                        precio = rates[0].get("price", {}).get("total", "N/A")
-                    
-                    sectores_libres.append(f"✅ *{nombre}*\n      💰 {precio}€ | 🎫 {libres} libres")
+            try:
+                data = response.json()
+                sectores_libres = []
+                
+                for zona in data:
+                    libres = zona.get("availability", {}).get("available", 0)
+                    if libres > 0:
+                        nombre = zona.get("name", "Zona")
+                        precio = "N/A"
+                        rates = zona.get("rates", [])
+                        if rates and isinstance(rates, list):
+                            # Accedemos al primer elemento de la lista 'rates'
+                            precio = rates[0].get("price", {}).get("total", "N/A")
+                        
+                        sectores_libres.append(f"✅ *{nombre}*\n      💰 {precio}€ | 🎫 {libres} libres")
 
-            if sectores_libres:
-                mensaje = "⚽ *ENTRADAS CELTA DETECTADAS*\n\n" + "\n".join(sectores_libres)
-                mensaje += "\n\n🔗 [COMPRAR](https://tickets.oneboxtds.com)"
-                enviar_telegram(mensaje)
-                print("Mensaje enviado con éxito.")
-            else:
-                print("No hay disponibilidad en ninguna zona.")
+                if sectores_libres:
+                    mensaje = "⚽ *ENTRADAS CELTA DETECTADAS*\n\n" + "\n".join(sectores_libres)
+                    mensaje += "\n\n🔗 [COMPRAR](https://tickets.oneboxtds.com)"
+                    enviar_telegram(mensaje)
+                    print("Éxito: Mensaje enviado.")
+                else:
+                    print("Todo agotado.")
+            except:
+                print("Error: El servidor no devolvió JSON. Posible bloqueo.")
+                print(f"Contenido recibido: {response.text[:200]}")
         else:
-            print(f"Error {response.status_code}")
+            print(f"Error de servidor: {response.status_code}")
+            
     except Exception as e:
-        print(f"Fallo: {e}")
+        print(f"Fallo en la ejecución: {e}")
 
 if __name__ == "__main__":
     check_tickets()
