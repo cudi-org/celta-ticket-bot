@@ -16,20 +16,28 @@ async def check_tickets():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            viewport={'width': 1920, 'height': 1080}
         )
         page = await context.new_page()
         
         try:
-            await page.goto(URL_OBJETIVO, wait_until="networkidle", timeout=60000)
-            await asyncio.sleep(8)
+            # Quitamos 'networkidle' y usamos 'domcontentloaded' para evitar el timeout
+            await page.goto(URL_OBJETIVO, wait_until="domcontentloaded", timeout=30000)
+            
+            # Espera forzada para que Cloudflare procese la entrada
+            await asyncio.sleep(10)
             
             content = await page.content()
             
-            if "TRIBUNA" in content or "disponibles" in content:
+            # Buscamos indicios de éxito en el HTML
+            if "TRIBUNA" in content or "available" in content or "select" in content:
                 if "Agotadas" not in content:
                     enviar_telegram(f"⚽ *ENTRADAS CELTA DETECTADAS*\n\n🔗 [COMPRAR]({URL_OBJETIVO})")
-            
+                    print("Éxito: Entradas encontradas.")
+            else:
+                print("La página cargó pero no se detectaron entradas.")
+                
         except Exception as e:
             print(f"Error: {e}")
         finally:
