@@ -3,57 +3,44 @@ import asyncio
 from playwright.async_api import async_playwright
 import requests
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 URL_OBJETIVO = "https://tickets.oneboxtds.com"
 
-def enviar_telegram(mensaje, foto_path=None):
+def enviar_telegram(mensaje):
     if not TOKEN or not CHAT_ID:
         return
-    
-    t = TOKEN.strip()
-    c = CHAT_ID.strip()
-    
+    url = f"https://api.telegram.org{TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": mensaje}
     try:
-        if foto_path:
-            url = f"https://api.telegram.org{t}/sendPhoto"
-            with open(foto_path, "rb") as f:
-                requests.post(url, data={"chat_id": c, "caption": mensaje}, files={"photo": f}, timeout=20)
-        else:
-            url = f"https://api.telegram.org{t}/sendMessage"
-            requests.post(url, data={"chat_id": c, "text": mensaje, "parse_mode": "Markdown"}, timeout=20)
+        requests.post(url, data=payload, timeout=10)
     except:
         pass
 
 async def check_tickets():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            viewport={'width': 1280, 'height': 800}
-        )
+        context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         page = await context.new_page()
         
         try:
-            await page.goto(URL_OBJETIVO, wait_until="networkidle", timeout=60000)
+            await page.goto(URL_OBJETIVO, wait_until="commit", timeout=60000)
             await asyncio.sleep(15)
             
-            foto = "debug.png"
-            await page.screenshot(path=foto)
+            content = (await page.content()).upper()
             
-            content = await page.content()
-            palabras = ["TRIBUNA", "RIO", "MARCADOR", "GOL", "PRECIO", "DISPONIBLE"]
-            detectado = any(x in content.upper() for x in palabras)
-            
-            if detectado and "AGOTADAS" not in content.upper():
-                enviar_telegram(f"⚽ *ENTRADAS CELTA!*\n\n[LINK]({URL_OBJETIVO})", foto)
+            # Si el código HTML contiene estas palabras y NO contiene "AGOTADAS"
+            if any(x in content for x in ["TRIBUNA", "RIO", "MARCADOR", "GOL"]) and "AGOTADAS" not in content:
+                enviar_telegram("HAY ENTRADAS DISPONIBLES: " + URL_OBJETIVO)
             else:
-                enviar_telegram("INFO: Foto del estado actual:", foto)
+                print("No se detectan entradas.")
                 
-        except:
-            pass
+        except Exception as e:
+            # Si hay CUALQUIER error, enviamos mensaje de texto plano
+            enviar_telegram("ERROR EN EL BOT: " + str(e)[:50])
         finally:
             await browser.close()
 
 if __name__ == "__main__":
     asyncio.run(check_tickets())
+
