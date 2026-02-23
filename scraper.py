@@ -8,12 +8,19 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 URL_OBJETIVO = "https://tickets.oneboxtds.com"
 
 def enviar_telegram(mensaje, foto_path=None):
-    url_base = f"https://api.telegram.org{TOKEN}/"
-    if foto_path:
-        with open(foto_path, "rb") as f:
-            requests.post(url_base + "sendPhoto", data={"chat_id": CHAT_ID, "caption": mensaje}, files={"photo": f})
-    else:
-        requests.post(url_base + "sendMessage", data={"chat_id": CHAT_ID, "text": mensaje, "parse_mode": "Markdown"})
+    if not TOKEN or not CHAT_ID:
+        print("Error: TELEGRAM_TOKEN o CHAT_ID no configurados.")
+        return
+    
+    url_base = f"https://api.telegram.org{TOKEN}"
+    try:
+        if foto_path:
+            with open(foto_path, "rb") as f:
+                requests.post(f"{url_base}/sendPhoto", data={"chat_id": CHAT_ID, "caption": mensaje}, files={"photo": f})
+        else:
+            requests.post(f"{url_base}/sendMessage", data={"chat_id": CHAT_ID, "text": mensaje, "parse_mode": "Markdown"})
+    except Exception as e:
+        print(f"Error enviando a Telegram: {e}")
 
 async def check_tickets():
     async with async_playwright() as p:
@@ -25,34 +32,26 @@ async def check_tickets():
         page = await context.new_page()
         
         try:
-            print("Navegando...")
+            print("Navegando a la web del Celta...")
             await page.goto(URL_OBJETIVO, wait_until="networkidle", timeout=60000)
-            
-            # Espera generosa para que el mapa y los precios carguen
             await asyncio.sleep(15)
             
-            # Guardamos una captura de pantalla para ver qué ve el bot
             foto = "debug_celta.png"
             await page.screenshot(path=foto)
             
             content = await page.content()
+            palabras = ["TRIBUNA", "RIO", "MARCADOR", "GOL", "PRECIO", "DISPONIBLE", "SELECT"]
+            detectado = any(x in content.upper() for x in palabras)
             
-            # Buscamos indicios de entradas (añado más palabras clave)
-            palabras_clave = ["TRIBUNA", "RIO", "MARCADOR", "GOL", "PRECIO", "DISPONIBLE", "SELECT", "ZONA"]
-            detectado = any(x in content.upper() for x in palabras_clave)
-            
-            if detectado:
-                enviar_telegram(f"⚽ *¡ENTRADAS CELTA!* [Link]({URL_OBJETIVO})", foto)
+            if detectado and "AGOTADAS" not in content.upper():
+                enviar_telegram(f"⚽ *¡ENTRADAS DETECTADAS!*\n\n🔗 [LINK]({URL_OBJETIVO})", foto)
             else:
-                # Si no detecta nada, nos manda la foto de todas formas para investigar
-                enviar_telegram("⚠️ No he detectado texto de entradas. Mira la foto:", foto)
+                enviar_telegram("⚠️ No veo entradas en el código, pero te mando foto:", foto)
                 
         except Exception as e:
-            print(f"Error: {e}")
-            enviar_telegram(f"❌ Error en el bot: {str(e)}")
+            print(f"Fallo: {e}")
         finally:
             await browser.close()
 
 if __name__ == "__main__":
     asyncio.run(check_tickets())
-
