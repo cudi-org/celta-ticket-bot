@@ -20,9 +20,12 @@ def check_tickets():
     }
 
     for ip in IPS_ORIGEN:
-        url = f"http://{ip}{PATH_API}"
+        # Probamos con HTTPS (puerto 443) y desactivando la verificación de certificado
+        url = f"https://{ip}{PATH_API}"
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            print(f"Intentando conectar a {ip}...")
+            response = requests.get(url, headers=headers, timeout=10, verify=False)
+            
             if response.status_code == 200:
                 data = response.json()
                 sectores = []
@@ -32,7 +35,8 @@ def check_tickets():
                         nombre = zona.get("name", "Zona")
                         precio = "N/A"
                         rates = zona.get("rates", [])
-                        if rates and isinstance(rates, list):
+                        # Corrección: rates es una lista, hay que coger el primer elemento
+                        if rates and len(rates) > 0:
                             precio = rates[0].get("price", {}).get("total", "N/A")
                         sectores.append(f"✅ *{nombre}*\n      💰 {precio}€ | 🎫 {libres} libres")
 
@@ -40,9 +44,15 @@ def check_tickets():
                     mensaje = "⚽ *ENTRADAS CELTA DETECTADAS*\n\n" + "\n".join(sectores)
                     mensaje += "\n\n🔗 [COMPRAR](https://tickets.oneboxtds.com)"
                     enviar_telegram(mensaje)
+                    print(f"¡Éxito con IP {ip}!")
                     return
-        except:
-            continue
+                else:
+                    print(f"IP {ip} conectada pero no hay entradas.")
+            else:
+                print(f"IP {ip} respondió con error {response.status_code}")
+        except Exception as e:
+            print(f"Fallo en IP {ip}: {e}")
 
 if __name__ == "__main__":
     check_tickets()
+
