@@ -17,26 +17,27 @@ async def check_tickets():
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            viewport={'width': 1920, 'height': 1080}
+            viewport={'width': 1280, 'height': 800}
         )
         page = await context.new_page()
         
         try:
-            # Quitamos 'networkidle' y usamos 'domcontentloaded' para evitar el timeout
-            await page.goto(URL_OBJETIVO, wait_until="domcontentloaded", timeout=30000)
+            await page.goto(URL_OBJETIVO, wait_until="commit", timeout=60000)
             
-            # Espera forzada para que Cloudflare procese la entrada
-            await asyncio.sleep(10)
+            # Esperamos a que aparezca cualquier texto de zona o el mapa
+            await page.wait_for_selector("body", timeout=20000)
+            await asyncio.sleep(12)
             
             content = await page.content()
             
-            # Buscamos indicios de éxito en el HTML
-            if "TRIBUNA" in content or "available" in content or "select" in content:
-                if "Agotadas" not in content:
-                    enviar_telegram(f"⚽ *ENTRADAS CELTA DETECTADAS*\n\n🔗 [COMPRAR]({URL_OBJETIVO})")
-                    print("Éxito: Entradas encontradas.")
+            # Buscamos términos que aparecen cuando hay entradas cargadas
+            detectado = any(x in content.upper() for x in ["TRIBUNA", "RIO", "MARCADOR", "GOL", "ZONA", "PRECIO"])
+            
+            if detectado and "AGOTADAS" not in content.upper():
+                enviar_telegram(f"⚽ *¡ENTRADAS CELTA DETECTADAS!*\n\n🔗 [COMPRAR]({URL_OBJETIVO})")
+                print("Éxito: Entradas encontradas y aviso enviado.")
             else:
-                print("La página cargó pero no se detectaron entradas.")
+                print("Página vacía de entradas o todo agotado.")
                 
         except Exception as e:
             print(f"Error: {e}")
