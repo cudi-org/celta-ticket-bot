@@ -1,58 +1,39 @@
-import requests
 import os
+import asyncio
+from playwright.async_api import async_playwright
+import requests
 
-IPS_ORIGEN = ["54.154.43.114", "52.51.125.210", "99.80.101.18", "34.249.200.190"]
-PATH_API = "/rccelta/products/2730371/prices?viewCode=V_blockmap"
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+URL_OBJETIVO = "https://tickets.oneboxtds.com"
 
 def enviar_telegram(mensaje):
     url = f"https://api.telegram.org{TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     requests.post(url, data=payload)
 
-def check_tickets():
-    headers = {
-        "Host": "tickets.oneboxtds.com",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json",
-        "Origin": "https://tickets.oneboxtds.com"
-    }
-
-    for ip in IPS_ORIGEN:
-        # Probamos con HTTPS (puerto 443) y desactivando la verificación de certificado
-        url = f"https://{ip}{PATH_API}"
+async def check_tickets():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        )
+        page = await context.new_page()
+        
         try:
-            print(f"Intentando conectar a {ip}...")
-            response = requests.get(url, headers=headers, timeout=10, verify=False)
+            await page.goto(URL_OBJETIVO, wait_until="networkidle", timeout=60000)
+            await asyncio.sleep(8)
             
-            if response.status_code == 200:
-                data = response.json()
-                sectores = []
-                for zona in data:
-                    libres = zona.get("availability", {}).get("available", 0)
-                    if libres > 0:
-                        nombre = zona.get("name", "Zona")
-                        precio = "N/A"
-                        rates = zona.get("rates", [])
-                        # Corrección: rates es una lista, hay que coger el primer elemento
-                        if rates and len(rates) > 0:
-                            precio = rates[0].get("price", {}).get("total", "N/A")
-                        sectores.append(f"✅ *{nombre}*\n      💰 {precio}€ | 🎫 {libres} libres")
-
-                if sectores:
-                    mensaje = "⚽ *ENTRADAS CELTA DETECTADAS*\n\n" + "\n".join(sectores)
-                    mensaje += "\n\n🔗 [COMPRAR](https://tickets.oneboxtds.com)"
-                    enviar_telegram(mensaje)
-                    print(f"¡Éxito con IP {ip}!")
-                    return
-                else:
-                    print(f"IP {ip} conectada pero no hay entradas.")
-            else:
-                print(f"IP {ip} respondió con error {response.status_code}")
+            content = await page.content()
+            
+            if "TRIBUNA" in content or "disponibles" in content:
+                if "Agotadas" not in content:
+                    enviar_telegram(f"⚽ *ENTRADAS CELTA DETECTADAS*\n\n🔗 [COMPRAR]({URL_OBJETIVO})")
+            
         except Exception as e:
-            print(f"Fallo en IP {ip}: {e}")
+            print(f"Error: {e}")
+        finally:
+            await browser.close()
 
 if __name__ == "__main__":
-    check_tickets()
-
+    asyncio.run(check_tickets())
